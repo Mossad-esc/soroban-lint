@@ -9,8 +9,6 @@ Catch missing authorization, unchecked arithmetic, storage and TTL mistakes, and
 [![Rust](https://img.shields.io/badge/rust-stable-informational)](#requirements)
 [![Status](https://img.shields.io/badge/status-early%20development-yellow)](#project-status)
 
-> **Project status:** Early development. This README describes the intended design and CLI. Items are marked with their status in the [rule catalog](#rule-catalog) and [roadmap](#roadmap). Replace the `your-org` placeholders and badge URLs with your real ones when you publish.
-
 ---
 
 ## Table of Contents
@@ -889,15 +887,8 @@ Rules target the current SDK API surface. Each rule's documentation notes the SD
 
 ## License
 
-Licensed under either of
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 - MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this project, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
-
----
-
-> **Disclaimer:** `soroban-lint` is a developer aid and is provided as-is. It is not a substitute for a professional security audit, and its results do not constitute a guarantee about the safety of any smart contract.
