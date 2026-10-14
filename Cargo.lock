@@ -324,6 +324,7 @@ dependencies = [
  "ignore",
  "proc-macro2",
  "serde",
+ "serde_json",
  "syn 2.0.119",
  "tempfile",
 ]
