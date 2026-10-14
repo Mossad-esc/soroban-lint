@@ -1,0 +1,19 @@
+[package]
+name = "lint-rules"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Built-in lint rules for soroban-lint"
+readme.workspace = true
+
+[dependencies]
+lint-core.workspace = true
+syn.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

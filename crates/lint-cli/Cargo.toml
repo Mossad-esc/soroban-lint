@@ -1,0 +1,27 @@
+[package]
+name = "lint-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line interface for soroban-lint"
+readme.workspace = true
+
+[[bin]]
+name = "soroban-lint"
+path = "src/main.rs"
+
+[dependencies]
+lint-core.workspace = true
+lint-rules.workspace = true
+lint-report.workspace = true
+clap.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

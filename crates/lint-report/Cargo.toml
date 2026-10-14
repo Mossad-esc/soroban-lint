@@ -1,0 +1,17 @@
+[package]
+name = "lint-report"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pretty, JSON, and SARIF reporters for soroban-lint"
+readme.workspace = true
+
+[dependencies]
+lint-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
