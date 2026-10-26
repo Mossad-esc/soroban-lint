@@ -26,7 +26,7 @@ pub fn builtin_registry() -> RuleRegistry {
     registry.register(
         Box::new(sor001::Sor001),
         "Access control",
-        RuleStatus::Planned,
+        RuleStatus::Implemented,
     );
     registry.register(Box::new(sor002::Sor002), "Arithmetic", RuleStatus::Planned);
     registry.register(
@@ -130,7 +130,6 @@ mod tests {
                 "severity mismatch for {id}"
             );
             assert_eq!(entry.category(), *category, "category mismatch for {id}");
-            assert_eq!(entry.status(), RuleStatus::Planned);
         }
     }
 

@@ -1,0 +1,13 @@
+---
+source: crates/lint-rules/tests/sor001_tests.rs
+expression: findings
+---
+- rule_id: SOR001
+  rule_name: missing-require-auth
+  severity: error
+  message: "entrypoint `transfer` writes to storage but never calls `require_auth`"
+  file: tests/fixtures/vulnerable/sor001_basic.rs
+  line: 23
+  column: 12
+  help: "call `from.require_auth()` before mutating state"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR001.md"
