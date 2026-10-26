@@ -12,6 +12,10 @@ readme.workspace = true
 lint-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+annotate-snippets.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
 
 [lints]
 workspace = true

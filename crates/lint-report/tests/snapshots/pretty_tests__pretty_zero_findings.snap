@@ -1,0 +1,5 @@
+---
+source: crates/lint-report/tests/pretty_tests.rs
+expression: output
+---
+No issues found in 3 files (0.04s)

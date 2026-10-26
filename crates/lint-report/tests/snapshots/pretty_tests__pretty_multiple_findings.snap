@@ -1,0 +1,28 @@
+---
+source: crates/lint-report/tests/pretty_tests.rs
+expression: portable
+---
+error[SOR001]: entrypoint `transfer` writes to storage but never calls `require_auth`
+  --> <workspace>/tests/fixtures/vulnerable/sor001_basic.rs:23:12
+   |
+23 |     pub fn transfer(env: Env, from: Address, to: Address, amount: i128) {
+   |            ^^^^^^^^
+   |
+   = help: call `from.require_auth()` before mutating state
+   = note: docs: https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR001.md
+error[SOR001]: entrypoint `transfer` writes to storage but never calls `require_auth`
+  --> <workspace>/tests/fixtures/vulnerable/sor001_remove.rs:24:12
+   |
+24 |     pub fn add_user(env: Env, user: Address) {
+   |            ^^^^^^^^
+   |
+   = help: call `from.require_auth()` before mutating state
+   = note: docs: https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR001.md
+warning[SOR002]: raw arithmetic on integer value
+  --> <workspace>/tests/fixtures/vulnerable/sor001_basic.rs:31:9
+   |
+31 |             .persistent()
+   |         -
+   |
+   = help: use `checked_add` and handle overflow explicitly
+Found 2 errors, 1 warning in 2 files (0.04s)

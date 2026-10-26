@@ -1,0 +1,13 @@
+---
+source: crates/lint-report/tests/pretty_tests.rs
+expression: portable
+---
+error[SOR001]: entrypoint `transfer` writes to storage but never calls `require_auth`
+  --> <workspace>/tests/fixtures/vulnerable/sor001_basic.rs:23:12
+   |
+23 |     pub fn transfer(env: Env, from: Address, to: Address, amount: i128) {
+   |            ^^^^^^^^
+   |
+   = help: call `from.require_auth()` before mutating state
+   = note: docs: https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR001.md
+Found 1 error in 1 file (0.04s)
