@@ -1,0 +1,46 @@
+---
+source: crates/lint-report/tests/json_tests.rs
+expression: json
+---
+{
+  "tool": "soroban-lint",
+  "version": "0.1.0",
+  "summary": {
+    "errors": 1,
+    "warnings": 2,
+    "notes": 0,
+    "files_scanned": 4
+  },
+  "findings": [
+    {
+      "rule": "SOR001",
+      "name": "missing-require-auth",
+      "severity": "error",
+      "message": "entrypoint `transfer` writes to storage but never calls `require_auth`",
+      "file": "contracts/token/src/lib.rs",
+      "line": 10,
+      "column": 12,
+      "help": "call `from.require_auth()` before mutating state"
+    },
+    {
+      "rule": "SOR002",
+      "name": "missing-require-auth",
+      "severity": "warning",
+      "message": "entrypoint `transfer` writes to storage but never calls `require_auth`",
+      "file": "contracts/token/src/lib.rs",
+      "line": 20,
+      "column": 12,
+      "help": "call `from.require_auth()` before mutating state"
+    },
+    {
+      "rule": "SOR003",
+      "name": "missing-require-auth",
+      "severity": "warning",
+      "message": "entrypoint `transfer` writes to storage but never calls `require_auth`",
+      "file": "contracts/token/src/lib.rs",
+      "line": 30,
+      "column": 12,
+      "help": "call `from.require_auth()` before mutating state"
+    }
+  ]
+}

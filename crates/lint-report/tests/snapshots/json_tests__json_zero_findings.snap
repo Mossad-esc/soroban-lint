@@ -1,0 +1,15 @@
+---
+source: crates/lint-report/tests/json_tests.rs
+expression: json
+---
+{
+  "tool": "soroban-lint",
+  "version": "0.1.0",
+  "summary": {
+    "errors": 0,
+    "warnings": 0,
+    "notes": 0,
+    "files_scanned": 2
+  },
+  "findings": []
+}

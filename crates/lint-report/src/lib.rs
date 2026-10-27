@@ -1,20 +1,8 @@
 //! Reporters (`pretty`, JSON, SARIF) for `soroban-lint`.
-//!
-//! # Architecture
-//!
-//! Every reporter implements the [`Reporter`] trait, which converts a
-//! [`Report`] into a `String`.  The CLI owns all I/O: it calls the reporter,
-//! then writes the result to stdout or a file.  This keeps the reporters
-//! pure functions, which makes them easy to snapshot-test.
-//!
-//! # Decision: `annotate-snippets`
-//!
-//! See [`docs/decisions/0001-diagnostics-crate.md`] for the full rationale.
-//! The short version: `annotate-snippets` is what rustc itself uses, it
-//! accepts line/column spans (matching what `syn` gives us), and it has a
-//! small dependency footprint with no derive macros.
 
+pub mod json;
 pub mod pretty;
+pub mod sarif;
 
 use std::time::Duration;
 
