@@ -40,3 +40,9 @@ fn sor001_safe_readonly() {
 fn sor001_safe_auth_for_args() {
     assert_rule_snapshot!(Sor001, "SOR001", "safe", "sor001_auth_for_args.rs");
 }
+
+/// Auth via private helper must not be flagged (call-graph credit).
+#[test]
+fn sor001_safe_auth_via_helper() {
+    assert_rule_snapshot!(Sor001, "SOR001", "safe", "sor001_auth_via_helper.rs");
+}
