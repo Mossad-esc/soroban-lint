@@ -1,0 +1,13 @@
+---
+source: crates/lint-rules/tests/sor003_tests.rs
+expression: findings
+---
+- rule_id: SOR003
+  rule_name: missing-ttl-extension
+  severity: warning
+  message: "entrypoint `register` writes to `persistent()` storage but never calls `extend_ttl` on that tier"
+  file: tests/fixtures/vulnerable/sor003_missing_ttl.rs
+  line: 24
+  column: 12
+  help: "add `env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO)` after the write to keep the entry alive"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR003.md"

@@ -1,0 +1,31 @@
+---
+source: crates/lint-rules/tests/sor002_tests.rs
+expression: findings
+---
+- rule_id: SOR002
+  rule_name: unchecked-arithmetic
+  severity: warning
+  message: "entrypoint `transfer` uses unchecked arithmetic operator `-` on an integer value"
+  file: tests/fixtures/vulnerable/sor002_raw_arithmetic.rs
+  line: 38
+  column: 33
+  help: "use `checked_add`, `checked_sub`, `checked_mul`, etc. and handle the overflow case, or set `overflow-checks = true` under `[profile.release]` in your workspace Cargo.toml"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR002.md"
+- rule_id: SOR002
+  rule_name: unchecked-arithmetic
+  severity: warning
+  message: "entrypoint `transfer` uses unchecked arithmetic operator `+` on an integer value"
+  file: tests/fixtures/vulnerable/sor002_raw_arithmetic.rs
+  line: 39
+  column: 29
+  help: "use `checked_add`, `checked_sub`, `checked_mul`, etc. and handle the overflow case, or set `overflow-checks = true` under `[profile.release]` in your workspace Cargo.toml"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR002.md"
+- rule_id: SOR002
+  rule_name: unchecked-arithmetic
+  severity: warning
+  message: "entrypoint `increment` uses unchecked arithmetic operator `+` on an integer value"
+  file: tests/fixtures/vulnerable/sor002_raw_arithmetic.rs
+  line: 58
+  column: 15
+  help: "use `checked_add`, `checked_sub`, `checked_mul`, etc. and handle the overflow case, or set `overflow-checks = true` under `[profile.release]` in your workspace Cargo.toml"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR002.md"

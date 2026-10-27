@@ -28,11 +28,15 @@ pub fn builtin_registry() -> RuleRegistry {
         "Access control",
         RuleStatus::Implemented,
     );
-    registry.register(Box::new(sor002::Sor002), "Arithmetic", RuleStatus::Planned);
+    registry.register(
+        Box::new(sor002::Sor002),
+        "Arithmetic",
+        RuleStatus::Implemented,
+    );
     registry.register(
         Box::new(sor003::Sor003),
         "Storage / TTL",
-        RuleStatus::Planned,
+        RuleStatus::Implemented,
     );
     registry.register(Box::new(sor004::Sor004), "Storage", RuleStatus::Planned);
     registry.register(
