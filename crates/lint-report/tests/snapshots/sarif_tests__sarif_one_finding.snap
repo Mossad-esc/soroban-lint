@@ -1,0 +1,58 @@
+---
+source: crates/lint-report/tests/sarif_tests.rs
+expression: sarif
+---
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "soroban-lint",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/Mossad-esc/soroban-lint",
+          "rules": [
+            {
+              "id": "SOR001",
+              "name": "missing-require-auth",
+              "shortDescription": {
+                "text": "missing-require-auth"
+              },
+              "helpUri": "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR001.md",
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "SOR001",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "entrypoint `transfer` writes to storage but never calls `require_auth`"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "contracts/token/src/lib.rs"
+                },
+                "region": {
+                  "startLine": 42,
+                  "startColumn": 12
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "soroban-lint/v1": "d0f2e69f01d50019"
+          }
+        }
+      ]
+    }
+  ]
+}

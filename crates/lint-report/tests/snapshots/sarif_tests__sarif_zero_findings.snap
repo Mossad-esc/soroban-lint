@@ -1,0 +1,21 @@
+---
+source: crates/lint-report/tests/sarif_tests.rs
+expression: sarif
+---
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "soroban-lint",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/Mossad-esc/soroban-lint",
+          "rules": []
+        }
+      },
+      "results": []
+    }
+  ]
+}
