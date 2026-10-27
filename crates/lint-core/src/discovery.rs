@@ -20,6 +20,8 @@ use syn::File;
 pub struct SourceFile {
     /// The path of the source file.
     pub path: PathBuf,
+    /// The raw source text of the file.
+    pub source: String,
     /// The name of the crate the file belongs to, when known.
     pub crate_name: Option<String>,
     /// The manifest of the crate the file belongs to, when known.
@@ -137,6 +139,7 @@ pub fn discover(paths: &[PathBuf], options: &DiscoveryOptions) -> Discovery {
                         .map_or((None, None), |map| map.attribute(&path));
                     files.push(SourceFile {
                         path,
+                        source,
                         crate_name,
                         manifest_path,
                         ast,

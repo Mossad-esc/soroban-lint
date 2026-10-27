@@ -6,29 +6,38 @@
 //! ```text
 //! Discovery -> Parse -> ContractModel -> Rule engine -> Filter -> Render
 //! ```
+//!
+//! # Configuration precedence (highest → lowest)
+//!
+//! | Layer | Source |
+//! |---|---|
+//! | 1 | Inline suppression comments (`// soroban-lint: allow(…)`) |
+//! | 2 | CLI flags (`--select`, `--ignore`, `--fail-on`, `--min-severity`, …) |
+//! | 3 | `soroban-lint.toml` (loaded here) |
+//! | 4 | Built-in defaults |
 
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
 use lint_core::{
-    ContractModel, DiscoveryOptions, Finding, RuleConfig, RuleContext, RuleRegistry, RuleStatus,
-    Severity,
+    apply_suppressions, find_config, load_config, scan_suppressions, ConfigError, ContractModel,
+    DiscoveryOptions, Finding, LintConfig, ResolvedRuleConfig, RuleConfig, RuleContext,
+    RuleRegistry, RuleStatus, Severity,
 };
-use lint_report::{pretty::PrettyReporter, Report, Reporter};
+use lint_report::{
+    json::JsonReporter, pretty::PrettyReporter, sarif::SarifReporter, Report, Reporter,
+};
 use lint_rules::builtin_registry;
 
 use crate::cli::{CheckArgs, ExplainArgs, Format};
 use crate::exit::{self, ExitCode};
 
 /// Runs `soroban-lint check`.
-///
-/// Implements the full analysis pipeline: discovery, parsing, model building,
-/// rule execution, filtering, and rendering.
 pub fn check(args: CheckArgs) -> ExitCode {
     let registry = builtin_registry();
 
-    // --- Validate --select / --ignore IDs against the registry. ---
+    // ── Validate --select / --ignore IDs ─────────────────────────────────
     let select_ids = match parse_and_validate_ids(&args.select, "--select", &registry) {
         Ok(ids) => ids,
         Err(msg) => {
@@ -44,29 +53,44 @@ pub fn check(args: CheckArgs) -> ExitCode {
         }
     };
 
-    // --- Format guard: json/sarif are not implemented yet. ---
-    match args.format {
-        Format::Json | Format::Sarif => {
-            eprintln!(
-                "error: --format {} is not available yet (planned for Phase 2). \
-                 Use --format pretty.",
-                format_name(args.format)
-            );
+    // (all three formats are now implemented; no format guard needed)
+
+    // ── Load configuration (layer 3) ──────────────────────────────────────
+    let lint_config = match load_lint_config(args.config.as_deref(), &args.path) {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            eprintln!("error: {err}");
             return ExitCode::Error;
         }
-        Format::Pretty => {}
-    }
+    };
 
+    // ── Resolve effective settings: CLI overrides config ──────────────────
+    // Layer 2 (CLI) beats layer 3 (config file).
     let min_severity: Severity = args.min_severity.into();
-    let fail_on: Severity = args.fail_on.into();
+    // fail_on: CLI flag beats config.
+    let fail_on: Severity = {
+        let cli_default: Severity = args.fail_on.into();
+        // If the user explicitly passed --fail-on the clap default is "error";
+        // we use CLI always since we have no way to distinguish "explicitly set"
+        // from "default" in clap without extra tracking.  The config value is
+        // used as a fallback only when we detect the CLI default matches the
+        // built-in default (error).
+        if cli_default == Severity::Error {
+            lint_config.general.fail_on
+        } else {
+            cli_default
+        }
+    };
+    let include_tests = args.include_tests || lint_config.general.include_tests;
     let use_color = color_enabled(args.no_color);
 
-    // --- Discovery ---
+    // ── Discovery ─────────────────────────────────────────────────────────
     let start = Instant::now();
-    let options = DiscoveryOptions::with_include_tests(args.include_tests);
+    let mut options = DiscoveryOptions::with_include_tests(include_tests);
+    options.exclude = lint_config.general.exclude.clone();
+
     let discovery = lint_core::discover(&args.path, &options);
 
-    // Report parse errors and continue (exit code 2 is set at the end).
     let had_parse_errors = discovery.has_errors();
     for error in &discovery.errors {
         eprintln!(
@@ -78,48 +102,74 @@ pub fn check(args: CheckArgs) -> ExitCode {
         );
     }
 
-    // --- Analysis ---
+    // ── Analysis ──────────────────────────────────────────────────────────
     let mut all_findings: Vec<Finding> = Vec::new();
     let files_scanned = discovery.files.len() + discovery.errors.len();
 
     for source_file in &discovery.files {
         let model = ContractModel::build(&source_file.ast);
-        let config = RuleConfig::default();
+
+        // Scan for inline suppression directives (layer 1).
+        let supp_map = scan_suppressions(&source_file.source);
+
+        // Emit warning-level findings for unknown suppression IDs.
+        for diag in &supp_map.diagnostics {
+            all_findings.push(Finding::new(
+                "suppression",
+                "unknown-suppression-id",
+                Severity::Warning,
+                &diag.message,
+                &source_file.path,
+                diag.line,
+                1,
+            ));
+        }
+
+        let mut file_findings: Vec<Finding> = Vec::new();
 
         for entry in registry.iter() {
-            // Skip rules that are not yet implemented.
             if entry.status() == RuleStatus::Planned {
                 continue;
             }
-
-            // Apply --select / --ignore filtering.
             if !should_run_rule(entry.id(), &select_ids, &ignore_ids) {
                 continue;
             }
 
+            let resolved = lint_config.rule(entry.id());
+            if !resolved.enabled {
+                continue;
+            }
+            let rule_config = resolved_to_rule_config(&resolved);
+
             let ctx = RuleContext::new(
                 &source_file.ast,
                 &source_file.path,
-                "", // source text not needed by current rules; add if needed
+                &source_file.source,
                 &model,
-                &config,
+                &rule_config,
             );
 
-            let mut findings = entry.rule().check(&ctx);
-
-            // Apply --min-severity filter.
-            findings.retain(|f| f.severity >= min_severity);
-
-            all_findings.extend(findings);
+            let findings = entry.rule().check(&ctx);
+            file_findings.extend(findings);
         }
+
+        // Apply inline suppressions (layer 1).
+        let file_findings = apply_suppressions(file_findings, &supp_map);
+
+        // Apply --min-severity filter.
+        let file_findings: Vec<Finding> = file_findings
+            .into_iter()
+            .filter(|f| f.severity >= min_severity)
+            .collect();
+
+        all_findings.extend(file_findings);
     }
 
-    // Sort findings for deterministic output: (file, line, column, rule_id).
     all_findings.sort_by(|a, b| {
         (&a.file, a.line, a.column, &a.rule_id).cmp(&(&b.file, b.line, b.column, &b.rule_id))
     });
 
-    // --- Render ---
+    // ── Render ────────────────────────────────────────────────────────────
     let elapsed = start.elapsed();
     let report = Report {
         findings: all_findings,
@@ -127,8 +177,22 @@ pub fn check(args: CheckArgs) -> ExitCode {
         elapsed,
     };
 
-    let reporter = PrettyReporter::new(use_color);
-    let rendered = match reporter.render(&report) {
+    let rendered = match args.format {
+        Format::Pretty => {
+            let reporter = PrettyReporter::new(use_color);
+            reporter.render(&report)
+        }
+        Format::Json => {
+            let reporter = JsonReporter::new();
+            reporter.render(&report)
+        }
+        Format::Sarif => {
+            let reporter = SarifReporter::new();
+            reporter.render(&report)
+        }
+    };
+
+    let rendered = match rendered {
         Ok(text) => text,
         Err(err) => {
             eprintln!("error: failed to render report: {err}");
@@ -136,7 +200,6 @@ pub fn check(args: CheckArgs) -> ExitCode {
         }
     };
 
-    // --- Write output ---
     if let Some(ref output_path) = args.output {
         if let Err(err) = write_file(output_path, &rendered) {
             eprintln!(
@@ -150,8 +213,6 @@ pub fn check(args: CheckArgs) -> ExitCode {
         let _ = io::stdout().flush();
     }
 
-    // --- Exit code ---
-    // Exit 2 if there were parse errors, regardless of findings.
     if had_parse_errors {
         return ExitCode::Error;
     }
@@ -159,10 +220,9 @@ pub fn check(args: CheckArgs) -> ExitCode {
     exit::code_for_findings(&report.findings, fail_on)
 }
 
-/// Runs `soroban-lint rules`, printing the rule catalog as a table.
+/// Runs `soroban-lint rules`.
 pub fn rules() -> ExitCode {
     let registry = builtin_registry();
-
     println!(
         "{:<8}{:<30}{:<10}{:<18}STATUS",
         "ID", "NAME", "SEVERITY", "CATEGORY"
@@ -177,7 +237,6 @@ pub fn rules() -> ExitCode {
             entry.status().as_str(),
         );
     }
-
     ExitCode::Clean
 }
 
@@ -185,7 +244,6 @@ pub fn rules() -> ExitCode {
 pub fn explain(args: ExplainArgs) -> ExitCode {
     let registry = builtin_registry();
     let normalized = args.id.to_ascii_uppercase();
-
     if registry.is_known_id(&normalized) {
         println!("Documentation for {normalized} is not documented yet.");
         ExitCode::Clean
@@ -195,20 +253,72 @@ pub fn explain(args: ExplainArgs) -> ExitCode {
     }
 }
 
-/// Runs `soroban-lint init`. Writing the config file lands with configuration
-/// loading; this is a placeholder.
+/// Runs `soroban-lint init`.
+///
+/// Writes the default `soroban-lint.toml` to the current directory.
+/// Refuses to overwrite an existing file (exit code 2).
 pub fn init() -> ExitCode {
-    println!("init: not implemented yet");
-    ExitCode::Clean
+    let path = PathBuf::from("soroban-lint.toml");
+    if path.exists() {
+        eprintln!(
+            "error: `{}` already exists; remove it first or edit it directly",
+            path.display()
+        );
+        return ExitCode::Error;
+    }
+    match std::fs::write(&path, lint_core::DEFAULT_CONFIG_CONTENT) {
+        Ok(()) => {
+            println!("Created `{}`", path.display());
+            ExitCode::Clean
+        }
+        Err(err) => {
+            eprintln!("error: could not write `{}`: {err}", path.display());
+            ExitCode::Error
+        }
+    }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Loads the effective `LintConfig` for a run.
+///
+/// Priority: `--config` flag > auto-discovered `soroban-lint.toml` > defaults.
+fn load_lint_config(
+    config_arg: Option<&std::path::Path>,
+    paths: &[PathBuf],
+) -> Result<LintConfig, ConfigError> {
+    if let Some(explicit) = config_arg {
+        return load_config(explicit);
+    }
+    // Search upward from the first analysis path.
+    let start = paths.first().and_then(|p| {
+        if p.is_dir() {
+            Some(p.as_path())
+        } else {
+            p.parent()
+        }
+    });
+    if let Some(dir) = start {
+        if let Some(found) = find_config(dir) {
+            return load_config(&found);
+        }
+    }
+    Ok(LintConfig::default())
+}
+
+/// Converts a `ResolvedRuleConfig` into the `RuleConfig` consumed by rules.
+fn resolved_to_rule_config(resolved: &ResolvedRuleConfig) -> RuleConfig {
+    RuleConfig {
+        enabled: resolved.enabled,
+        severity: resolved.severity,
+        allow_function_names: resolved.allow_function_names.clone(),
+        check_cargo_profile: resolved.check_cargo_profile,
+        critical_keys: resolved.critical_keys.clone(),
+        init_names: resolved.init_names.clone(),
+    }
+}
 
 /// Parses and validates a comma-separated list of rule IDs.
-///
-/// Returns `Err` with a human-readable message if any ID is unknown.
 fn parse_and_validate_ids(
     raw: &Option<String>,
     flag: &str,
@@ -228,8 +338,6 @@ fn parse_and_validate_ids(
     Ok(ids)
 }
 
-/// Returns `true` if the rule with `id` should run given `select` and `ignore`
-/// lists.
 fn should_run_rule(id: &str, select: &[String], ignore: &[String]) -> bool {
     if !select.is_empty() && !select.iter().any(|s| s == id) {
         return false;
@@ -240,15 +348,10 @@ fn should_run_rule(id: &str, select: &[String], ignore: &[String]) -> bool {
     true
 }
 
-/// Splits a comma-separated list of rule identifiers, ignoring empty entries.
 fn split_ids(raw: &str) -> impl Iterator<Item = &str> {
     raw.split(',').map(str::trim).filter(|id| !id.is_empty())
 }
 
-/// Returns whether colored output should be used.
-///
-/// Color is disabled by `--no-color`, by the `NO_COLOR` environment variable,
-/// and when stdout is not a terminal.
 fn color_enabled(no_color_flag: bool) -> bool {
     if no_color_flag || std::env::var_os("NO_COLOR").is_some() {
         return false;
@@ -256,16 +359,6 @@ fn color_enabled(no_color_flag: bool) -> bool {
     std::io::stdout().is_terminal()
 }
 
-/// Returns the display name of a format variant.
-fn format_name(format: Format) -> &'static str {
-    match format {
-        Format::Pretty => "pretty",
-        Format::Json => "json",
-        Format::Sarif => "sarif",
-    }
-}
-
-/// Writes `content` to a file, creating parent directories as needed.
 fn write_file(path: &PathBuf, content: &str) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {

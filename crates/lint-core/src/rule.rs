@@ -10,14 +10,22 @@ use crate::severity::Severity;
 
 /// Per-rule resolved configuration.
 ///
-/// This is a placeholder while configuration loading is not implemented yet;
-/// rule-specific options are added when `soroban-lint.toml` parsing lands.
+/// Carries the common fields (enabled, severity override) plus the extra
+/// options surfaced from `soroban-lint.toml` once configuration loading lands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuleConfig {
     /// Whether the rule is enabled.
     pub enabled: bool,
     /// Optional severity override; `None` uses the rule's default severity.
     pub severity: Option<Severity>,
+    /// SOR001: function names that are intentionally permissionless.
+    pub allow_function_names: Vec<String>,
+    /// SOR002: inspect `[profile.release]` in `Cargo.toml`.
+    pub check_cargo_profile: Option<bool>,
+    /// SOR004: key name patterns treated as critical.
+    pub critical_keys: Option<Vec<String>>,
+    /// SOR007: function name patterns considered initializers.
+    pub init_names: Option<Vec<String>>,
 }
 
 impl Default for RuleConfig {
@@ -25,6 +33,10 @@ impl Default for RuleConfig {
         Self {
             enabled: true,
             severity: None,
+            allow_function_names: Vec::new(),
+            check_cargo_profile: None,
+            critical_keys: None,
+            init_names: None,
         }
     }
 }
