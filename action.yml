@@ -1,0 +1,72 @@
+name: soroban-lint
+description: >
+  Run soroban-lint static analysis on Soroban smart contracts.
+  Installs the binary and runs `soroban-lint check` with the supplied inputs.
+  SARIF upload is a separate step; see the README for the full example.
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: 'Files or directories to analyze'
+    required: false
+    default: '.'
+  format:
+    description: 'Output format: pretty, json, or sarif'
+    required: false
+    default: 'pretty'
+  output:
+    description: 'Write the report to this file instead of stdout (optional)'
+    required: false
+    default: ''
+  fail-on:
+    description: 'Exit non-zero at or above this severity: note, warning, or error'
+    required: false
+    default: 'error'
+  version:
+    description: >
+      Version of soroban-lint to install. Use "latest" to install the newest
+      published version. When the crate is not yet on crates.io, this action
+      falls back to building from the local workspace (for self-tests).
+    required: false
+    default: 'latest'
+
+runs:
+  using: composite
+  steps:
+    - name: Install soroban-lint
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        VERSION="${{ inputs.version }}"
+
+        # ── Try to install from crates.io ─────────────────────────────────────
+        if [ "$VERSION" = "latest" ]; then
+          INSTALL_ARGS="soroban-lint --locked"
+        else
+          INSTALL_ARGS="soroban-lint@${VERSION} --locked"
+        fi
+
+        # Try crates.io first; fall back to local build (useful before first publish).
+        if ! cargo install $INSTALL_ARGS 2>/dev/null; then
+          echo "::notice::soroban-lint not found on crates.io; building from local workspace"
+          cargo install --path crates/lint-cli --locked
+        fi
+
+    - name: Run soroban-lint check
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        ARGS=("${{ inputs.path }}")
+        ARGS+=(--format "${{ inputs.format }}")
+        ARGS+=(--fail-on "${{ inputs.fail-on }}")
+
+        if [ -n "${{ inputs.output }}" ]; then
+          ARGS+=(--output "${{ inputs.output }}")
+        fi
+
+        soroban-lint check "${ARGS[@]}"
