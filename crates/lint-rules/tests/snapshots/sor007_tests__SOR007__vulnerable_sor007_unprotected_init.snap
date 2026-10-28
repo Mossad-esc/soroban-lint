@@ -1,0 +1,13 @@
+---
+source: crates/lint-rules/tests/sor007_tests.rs
+expression: findings
+---
+- rule_id: SOR007
+  rule_name: unprotected-initialize
+  severity: error
+  message: "initializer `initialize` writes storage but has neither an already-initialized guard nor a `require_auth` call; it can be called by anyone or called twice"
+  file: tests/fixtures/vulnerable/sor007_unprotected_init.rs
+  line: 21
+  column: 12
+  help: "add `if env.storage().instance().has(&DataKey::Admin) { return Err(Error::AlreadyInitialized); }` and/or `admin.require_auth()` at the start of the function"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR007.md"
