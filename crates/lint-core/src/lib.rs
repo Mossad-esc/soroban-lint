@@ -1,5 +1,6 @@
 //! Core types, rule engine, and analysis context for `soroban-lint`.
 
+pub mod baseline;
 pub mod callgraph;
 pub mod config;
 pub mod discovery;
@@ -11,6 +12,10 @@ pub mod severity;
 pub mod suppression;
 pub mod util;
 
+pub use baseline::{
+    apply_baseline, baseline_from_findings, fingerprint as baseline_fingerprint, load_baseline,
+    save_baseline, Baseline, BaselineError,
+};
 pub use callgraph::{fn_has_auth, fn_has_extend_ttl, fn_writes_storage, CallGraph};
 pub use config::{
     find_config, load_config, ConfigError, GeneralConfig, LintConfig, ResolvedRuleConfig,

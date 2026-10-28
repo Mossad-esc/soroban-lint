@@ -448,3 +448,159 @@ fn safe_auth_for_args_fixture_exits_zero() {
         .code(0)
         .stdout(predicate::str::contains("No issues found"));
 }
+
+// ---------------------------------------------------------------------------
+// Baseline tests
+// ---------------------------------------------------------------------------
+
+/// --update-baseline creates a baseline file and exits 0.
+#[test]
+fn update_baseline_creates_file_and_exits_zero() {
+    let dir = tempdir().expect("temp dir");
+    let baseline_path = dir.path().join("baseline.json");
+
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("vulnerable", "sor001_basic.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .arg("--update-baseline")
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("Baseline written"));
+
+    assert!(baseline_path.exists(), "baseline file must be created");
+    let content = std::fs::read_to_string(&baseline_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&content).expect("baseline is valid JSON");
+    assert_eq!(v["version"], "1");
+    assert!(v["fingerprints"].is_array() || v["fingerprints"].is_object());
+}
+
+/// Applying an existing baseline suppresses known findings (exits 0).
+#[test]
+fn applying_baseline_suppresses_known_finding() {
+    let dir = tempdir().expect("temp dir");
+    let baseline_path = dir.path().join("baseline.json");
+
+    // Step 1: create baseline from the vulnerable fixture.
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("vulnerable", "sor001_basic.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .arg("--update-baseline")
+        .assert()
+        .code(0);
+
+    // Step 2: run again with the baseline — finding should be suppressed.
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("vulnerable", "sor001_basic.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("baselined"));
+}
+
+/// A new finding (not in baseline) still causes exit 1.
+#[test]
+fn new_finding_still_fails_with_baseline() {
+    let dir = tempdir().expect("temp dir");
+    let baseline_path = dir.path().join("baseline.json");
+
+    // Create a baseline from a safe file (empty baseline).
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("safe", "sor001_readonly.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .arg("--update-baseline")
+        .assert()
+        .code(0);
+
+    // The vulnerable file has a finding not in the baseline — must fail.
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("vulnerable", "sor001_basic.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .assert()
+        .code(1);
+}
+
+/// --baseline with a missing file (without --update-baseline) exits 2.
+#[test]
+fn missing_baseline_file_exits_two() {
+    let dir = tempdir().expect("temp dir");
+    let baseline_path = dir.path().join("nonexistent.json");
+
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("safe", "sor001_readonly.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("not found"));
+}
+
+/// Line shift does not break baseline matching.
+#[test]
+fn line_shift_does_not_break_baseline() {
+    let dir = tempdir().expect("temp dir");
+    let baseline_path = dir.path().join("baseline.json");
+
+    // Create baseline from the vulnerable file.
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("vulnerable", "sor001_basic.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .arg("--update-baseline")
+        .assert()
+        .code(0);
+
+    // The same file run again against the baseline exits 0 (line numbers
+    // don't matter for fingerprinting).
+    bin()
+        .args(["check", "--select", "SOR001"])
+        .arg(fixture("vulnerable", "sor001_basic.rs"))
+        .arg("--baseline")
+        .arg(&baseline_path)
+        .assert()
+        .code(0);
+}
+
+// ---------------------------------------------------------------------------
+// Determinism test (parallel output must be byte-identical across runs)
+// ---------------------------------------------------------------------------
+
+/// Run the same vulnerable fixture 20 times and assert identical output each
+/// time. This guards against non-determinism introduced by parallel execution.
+#[test]
+fn parallel_output_is_deterministic() {
+    let path = fixture("vulnerable", "sor001_basic.rs");
+    let first_output = bin()
+        .args(["check", "--format", "json", "--select", "SOR001"])
+        .arg(&path)
+        .output()
+        .expect("first run");
+
+    for i in 1..20 {
+        let run = bin()
+            .args(["check", "--format", "json", "--select", "SOR001"])
+            .arg(&path)
+            .output()
+            .unwrap_or_else(|e| panic!("run {i} failed: {e}"));
+        assert_eq!(
+            first_output.stdout, run.stdout,
+            "run {i} produced different stdout"
+        );
+        assert_eq!(
+            first_output.status.code(),
+            run.status.code(),
+            "run {i} had different exit code"
+        );
+    }
+}

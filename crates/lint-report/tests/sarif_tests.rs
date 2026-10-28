@@ -10,6 +10,7 @@ fn fixed_report(findings: Vec<Finding>, files: usize) -> Report {
         findings,
         files_scanned: files,
         elapsed: Duration::from_millis(0),
+        baselined_count: 0,
     }
 }
 

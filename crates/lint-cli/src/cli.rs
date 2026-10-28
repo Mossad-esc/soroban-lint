@@ -112,6 +112,14 @@ pub struct CheckArgs {
     /// Also analyze `#[cfg(test)]` modules and `tests/`.
     #[arg(long)]
     pub include_tests: bool,
+
+    /// Ignore findings already recorded in this baseline file.
+    #[arg(long, value_name = "FILE")]
+    pub baseline: Option<PathBuf>,
+
+    /// Write current findings to the --baseline file and exit 0.
+    #[arg(long)]
+    pub update_baseline: bool,
 }
 
 /// Arguments for `explain`.

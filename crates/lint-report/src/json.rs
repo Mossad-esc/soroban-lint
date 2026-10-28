@@ -141,6 +141,7 @@ mod tests {
             findings,
             files_scanned: files,
             elapsed: Duration::from_millis(42),
+            baselined_count: 0,
         }
     }
 

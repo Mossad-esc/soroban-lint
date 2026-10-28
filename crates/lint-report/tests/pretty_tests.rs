@@ -55,6 +55,7 @@ fn report(findings: Vec<Finding>, files: usize) -> Report {
         findings,
         files_scanned: files,
         elapsed: FIXED_ELAPSED,
+        baselined_count: 0,
     }
 }
 

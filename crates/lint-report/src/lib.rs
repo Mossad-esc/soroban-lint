@@ -20,6 +20,8 @@ pub struct Report {
     /// How long the run took.  Set to a fixed value in tests so snapshots are
     /// stable.
     pub elapsed: Duration,
+    /// Number of findings suppressed by a baseline file (0 when no baseline).
+    pub baselined_count: usize,
 }
 
 impl Report {

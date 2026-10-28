@@ -180,6 +180,28 @@ soroban-lint check [PATH ...] [OPTIONS]
 | `--fail-on <LVL>` | Exit non-zero at or above this severity | `error` |
 | `--no-color` | Disable colored output | auto-detected |
 | `--include-tests` | Also analyze `#[cfg(test)]` modules and `tests/` | off |
+| `--baseline <FILE>` | Ignore findings already recorded in this baseline file | none |
+| `--update-baseline` | Write current findings to the `--baseline` file and exit 0 | off |
+
+### Baselines
+
+Baselines let you gate CI on *new* findings only, ignoring pre-existing ones.
+
+**Create a baseline** from the current state of the codebase:
+
+```bash
+soroban-lint check --baseline baseline.json --update-baseline
+```
+
+**Check against it** on every subsequent run:
+
+```bash
+soroban-lint check --baseline baseline.json
+```
+
+Any finding whose stable fingerprint (rule id + file + enclosing function + normalised message) is present in the baseline is silently dropped before severity filtering and exit-code computation. The pretty summary line reports how many findings were suppressed this way.
+
+A `--baseline` path that does not exist (without `--update-baseline`) is an exit-code 2 error.
 
 ### `rules` and `explain`
 

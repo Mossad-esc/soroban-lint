@@ -273,6 +273,7 @@ mod tests {
             findings,
             files_scanned: files,
             elapsed: Duration::from_millis(0),
+            baselined_count: 0,
         }
     }
 

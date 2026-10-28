@@ -226,8 +226,14 @@ fn render_summary(report: &Report) -> String {
 
     let file_str = if files == 1 { "file" } else { "files" };
 
+    let baseline_suffix = if report.baselined_count > 0 {
+        format!(" ({} baselined)", report.baselined_count)
+    } else {
+        String::new()
+    };
+
     if errors == 0 && warnings == 0 && notes == 0 {
-        return format!("No issues found in {files} {file_str} ({secs:.2}s)");
+        return format!("No issues found in {files} {file_str} ({secs:.2}s){baseline_suffix}");
     }
 
     let mut parts: Vec<String> = Vec::new();
@@ -245,7 +251,7 @@ fn render_summary(report: &Report) -> String {
     }
 
     format!(
-        "Found {} in {files} {file_str} ({secs:.2}s)",
+        "Found {} in {files} {file_str} ({secs:.2}s){baseline_suffix}",
         parts.join(", ")
     )
 }
@@ -295,6 +301,7 @@ mod tests {
             findings,
             files_scanned: files,
             elapsed: Duration::from_millis(42),
+            baselined_count: 0,
         }
     }
 
