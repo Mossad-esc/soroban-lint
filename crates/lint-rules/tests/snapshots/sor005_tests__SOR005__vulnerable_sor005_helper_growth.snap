@@ -1,0 +1,13 @@
+---
+source: crates/lint-rules/tests/sor005_tests.rs
+expression: findings
+---
+- rule_id: SOR005
+  rule_name: unbounded-storage-growth
+  severity: warning
+  message: "function `append_user` loads a collection under a fixed key, appends to it, and writes it back without a length guard; unbounded growth can make the contract unusable"
+  file: tests/fixtures/vulnerable/sor005_helper_growth.rs
+  line: 31
+  column: 15
+  help: "store each item under its own key with a counter, or enforce a maximum length and return a typed error when it is exceeded (e.g. `Err(Error::Full)?`)"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR005.md"
