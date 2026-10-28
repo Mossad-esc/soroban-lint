@@ -21,9 +21,10 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use lint_core::{
-    apply_suppressions, find_config, load_config, scan_suppressions, ConfigError, ContractModel,
-    DiscoveryOptions, Finding, LintConfig, ResolvedRuleConfig, RuleConfig, RuleContext,
-    RuleRegistry, RuleStatus, Severity,
+    apply_baseline, apply_suppressions, baseline_from_findings, find_config, load_baseline,
+    load_config, save_baseline, scan_suppressions, ConfigError, ContractModel, DiscoveryOptions,
+    Finding, LintConfig, ResolvedRuleConfig, RuleConfig, RuleContext, RuleRegistry, RuleStatus,
+    Severity,
 };
 use lint_report::{
     json::JsonReporter, pretty::PrettyReporter, sarif::SarifReporter, Report, Reporter,
@@ -102,72 +103,128 @@ pub fn check(args: CheckArgs) -> ExitCode {
         );
     }
 
-    // ── Analysis ──────────────────────────────────────────────────────────
-    let mut all_findings: Vec<Finding> = Vec::new();
+    // ── Analysis (parallel per-file) ──────────────────────────────────────
+    // We parallelize by parsing and running all rules on each file concurrently.
+    // Each file is fully independent: the call graph is built per-file and
+    // never shared between threads.  RAYON_NUM_THREADS is honoured automatically.
+    //
+    // Because `syn::File` is not `Send`, we collect (path, source) pairs from
+    // discovery and re-parse inside the parallel closure.
     let files_scanned = discovery.files.len() + discovery.errors.len();
 
-    for source_file in &discovery.files {
-        let model = ContractModel::build(&source_file.ast);
+    use rayon::prelude::*;
 
-        // Scan for inline suppression directives (layer 1).
-        let supp_map = scan_suppressions(&source_file.source);
+    // Collect (path, source) pairs to avoid Send issues with pre-parsed ASTs.
+    let file_inputs: Vec<(std::path::PathBuf, String)> = discovery
+        .files
+        .into_iter()
+        .map(|sf| (sf.path, sf.source))
+        .collect();
 
-        // Emit warning-level findings for unknown suppression IDs.
-        for diag in &supp_map.diagnostics {
-            all_findings.push(Finding::new(
-                "suppression",
-                "unknown-suppression-id",
-                Severity::Warning,
-                &diag.message,
-                &source_file.path,
-                diag.line,
-                1,
-            ));
-        }
+    let per_file_results: Vec<Vec<Finding>> = file_inputs
+        .par_iter()
+        .map(|(path, source)| {
+            // Re-parse; this is cheap relative to rule execution.
+            let ast = match syn::parse_file(source) {
+                Ok(a) => a,
+                Err(_) => return Vec::new(),
+            };
+            let model = ContractModel::build(&ast);
+            let supp_map = scan_suppressions(source);
 
-        let mut file_findings: Vec<Finding> = Vec::new();
+            let mut file_findings: Vec<Finding> = Vec::new();
 
-        for entry in registry.iter() {
-            if entry.status() == RuleStatus::Planned {
-                continue;
+            for diag in &supp_map.diagnostics {
+                file_findings.push(Finding::new(
+                    "suppression",
+                    "unknown-suppression-id",
+                    Severity::Warning,
+                    &diag.message,
+                    path,
+                    diag.line,
+                    1,
+                ));
             }
-            if !should_run_rule(entry.id(), &select_ids, &ignore_ids) {
-                continue;
+
+            for entry in registry.iter() {
+                if entry.status() == RuleStatus::Planned {
+                    continue;
+                }
+                if !should_run_rule(entry.id(), &select_ids, &ignore_ids) {
+                    continue;
+                }
+                let resolved = lint_config.rule(entry.id());
+                if !resolved.enabled {
+                    continue;
+                }
+                let rule_config = resolved_to_rule_config(&resolved);
+                let ctx = RuleContext::new(&ast, path, source, &model, &rule_config);
+                file_findings.extend(entry.rule().check(&ctx));
             }
 
-            let resolved = lint_config.rule(entry.id());
-            if !resolved.enabled {
-                continue;
-            }
-            let rule_config = resolved_to_rule_config(&resolved);
+            let file_findings = apply_suppressions(file_findings, &supp_map);
+            file_findings
+                .into_iter()
+                .filter(|f| f.severity >= min_severity)
+                .collect()
+        })
+        .collect();
 
-            let ctx = RuleContext::new(
-                &source_file.ast,
-                &source_file.path,
-                &source_file.source,
-                &model,
-                &rule_config,
-            );
+    let mut all_findings: Vec<Finding> = per_file_results.into_iter().flatten().collect();
 
-            let findings = entry.rule().check(&ctx);
-            file_findings.extend(findings);
-        }
-
-        // Apply inline suppressions (layer 1).
-        let file_findings = apply_suppressions(file_findings, &supp_map);
-
-        // Apply --min-severity filter.
-        let file_findings: Vec<Finding> = file_findings
-            .into_iter()
-            .filter(|f| f.severity >= min_severity)
-            .collect();
-
-        all_findings.extend(file_findings);
-    }
-
+    // Sort for deterministic output regardless of thread scheduling.
     all_findings.sort_by(|a, b| {
         (&a.file, a.line, a.column, &a.rule_id).cmp(&(&b.file, b.line, b.column, &b.rule_id))
     });
+
+    // ── Baseline (--baseline / --update-baseline) ─────────────────────────
+    let workspace_root = detect_workspace_root(&args.path);
+    let baselined_count;
+
+    if args.update_baseline {
+        // Write current findings as the new baseline, then exit 0.
+        let baseline_path = match &args.baseline {
+            Some(p) => p.clone(),
+            None => {
+                eprintln!("error: --update-baseline requires --baseline <FILE>");
+                return ExitCode::Error;
+            }
+        };
+        let baseline = baseline_from_findings(&all_findings, &workspace_root);
+        if let Err(e) = save_baseline(&baseline, &baseline_path) {
+            eprintln!("error: {e}");
+            return ExitCode::Error;
+        }
+        println!(
+            "Baseline written to `{}` ({} findings)",
+            baseline_path.display(),
+            all_findings.len()
+        );
+        return ExitCode::Clean;
+    }
+
+    if let Some(ref baseline_path) = args.baseline {
+        if !baseline_path.exists() {
+            eprintln!(
+                "error: baseline file `{}` not found; \
+                 run with --update-baseline to create it",
+                baseline_path.display()
+            );
+            return ExitCode::Error;
+        }
+        let baseline = match load_baseline(baseline_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::Error;
+            }
+        };
+        let (kept, suppressed) = apply_baseline(all_findings, &baseline, &workspace_root);
+        all_findings = kept;
+        baselined_count = suppressed;
+    } else {
+        baselined_count = 0;
+    }
 
     // ── Render ────────────────────────────────────────────────────────────
     let elapsed = start.elapsed();
@@ -175,6 +232,7 @@ pub fn check(args: CheckArgs) -> ExitCode {
         findings: all_findings,
         files_scanned,
         elapsed,
+        baselined_count,
     };
 
     let rendered = match args.format {
@@ -221,19 +279,37 @@ pub fn check(args: CheckArgs) -> ExitCode {
 }
 
 /// Runs `soroban-lint rules`.
+///
+/// Prints a table of all rules: ID, name, default severity, category, status.
+/// When a `soroban-lint.toml` is present, shows the effective (possibly
+/// overridden) severity and enabled state.
 pub fn rules() -> ExitCode {
     let registry = builtin_registry();
+
+    // Try to load config from the current directory so we can show effective
+    // severity/enabled for each rule.
+    let lint_config = find_config(std::path::Path::new("."))
+        .and_then(|p| load_config(&p).ok())
+        .unwrap_or_default();
+
     println!(
-        "{:<8}{:<30}{:<10}{:<18}STATUS",
-        "ID", "NAME", "SEVERITY", "CATEGORY"
+        "{:<8}{:<30}{:<12}{:<20}{:<12}STATUS",
+        "ID", "NAME", "SEVERITY", "CATEGORY", "ENABLED"
     );
+    println!("{}", "-".repeat(90));
     for entry in registry.iter() {
+        let resolved = lint_config.rule(entry.id());
+        let effective_severity = resolved
+            .severity
+            .unwrap_or_else(|| entry.default_severity());
+        let enabled = if resolved.enabled { "yes" } else { "no" };
         println!(
-            "{:<8}{:<30}{:<10}{:<18}{}",
+            "{:<8}{:<30}{:<12}{:<20}{:<12}{}",
             entry.id(),
             entry.name(),
-            entry.default_severity(),
+            effective_severity,
             entry.category(),
+            enabled,
             entry.status().as_str(),
         );
     }
@@ -241,15 +317,30 @@ pub fn rules() -> ExitCode {
 }
 
 /// Runs `soroban-lint explain <ID>`.
+///
+/// Prints the full Markdown documentation for the rule, embedded at compile
+/// time from `docs/rules/<ID>.md`. Accepts lower-case IDs.
+/// Exits with code 2 for unknown IDs.
 pub fn explain(args: ExplainArgs) -> ExitCode {
     let registry = builtin_registry();
     let normalized = args.id.to_ascii_uppercase();
-    if registry.is_known_id(&normalized) {
-        println!("Documentation for {normalized} is not documented yet.");
-        ExitCode::Clean
-    } else {
-        eprintln!("error: unknown rule `{}`", args.id);
-        ExitCode::Error
+    if !registry.is_known_id(&normalized) {
+        eprintln!(
+            "error: unknown rule `{}`; run `soroban-lint rules` to list valid IDs",
+            args.id
+        );
+        return ExitCode::Error;
+    }
+    match crate::docs::rule_doc(&normalized) {
+        Some(text) => {
+            print!("{text}");
+            ExitCode::Clean
+        }
+        None => {
+            // Known ID but no embedded doc yet (shouldn't happen after Commit 9).
+            eprintln!("error: no documentation available for `{normalized}`");
+            ExitCode::Error
+        }
     }
 }
 
@@ -366,4 +457,33 @@ fn write_file(path: &PathBuf, content: &str) -> io::Result<()> {
         }
     }
     std::fs::write(path, content)
+}
+
+/// Detects the workspace root for fingerprinting.
+///
+/// Walks up from the first analysis path looking for a `Cargo.toml` or
+/// `.git` directory. Falls back to the current directory.
+fn detect_workspace_root(paths: &[PathBuf]) -> PathBuf {
+    let start = paths
+        .first()
+        .and_then(|p| {
+            if p.is_dir() {
+                Some(p.as_path())
+            } else {
+                p.parent()
+            }
+        })
+        .unwrap_or_else(|| std::path::Path::new("."));
+
+    let mut current = start;
+    loop {
+        if current.join(".git").is_dir() || current.join("Cargo.toml").is_file() {
+            return current.to_path_buf();
+        }
+        match current.parent() {
+            Some(parent) => current = parent,
+            None => break,
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
