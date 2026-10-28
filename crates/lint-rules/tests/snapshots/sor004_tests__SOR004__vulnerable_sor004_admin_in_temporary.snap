@@ -1,0 +1,13 @@
+---
+source: crates/lint-rules/tests/sor004_tests.rs
+expression: findings
+---
+- rule_id: SOR004
+  rule_name: critical-data-in-temporary
+  severity: error
+  message: "critical key `Admin` is written to `temporary()` storage; critical state should use `instance()` or `persistent()` storage"
+  file: tests/fixtures/vulnerable/sor004_admin_in_temporary.rs
+  line: 22
+  column: 35
+  help: "use `env.storage().instance()` for contract-wide critical state or `env.storage().persistent()` for per-user critical state; `temporary()` storage can silently expire"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR004.md"

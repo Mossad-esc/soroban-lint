@@ -38,26 +38,26 @@ pub fn builtin_registry() -> RuleRegistry {
         "Storage / TTL",
         RuleStatus::Implemented,
     );
-    registry.register(Box::new(sor004::Sor004), "Storage", RuleStatus::Planned);
+    registry.register(Box::new(sor004::Sor004), "Storage", RuleStatus::Implemented);
     registry.register(
         Box::new(sor005::Sor005),
         "Storage / DoS",
-        RuleStatus::Planned,
+        RuleStatus::Implemented,
     );
     registry.register(
         Box::new(sor006::Sor006),
         "Error handling",
-        RuleStatus::Planned,
+        RuleStatus::Implemented,
     );
     registry.register(
         Box::new(sor007::Sor007),
         "Access control",
-        RuleStatus::Planned,
+        RuleStatus::Implemented,
     );
     registry.register(
         Box::new(sor008::Sor008),
         "Compatibility",
-        RuleStatus::Planned,
+        RuleStatus::Implemented,
     );
 
     registry
