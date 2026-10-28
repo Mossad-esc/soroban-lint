@@ -17,6 +17,8 @@ lint-core.workspace = true
 lint-rules.workspace = true
 lint-report.workspace = true
 clap.workspace = true
+rayon.workspace = true
+syn.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
