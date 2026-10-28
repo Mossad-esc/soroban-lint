@@ -1,0 +1,40 @@
+---
+source: crates/lint-rules/tests/sor006_tests.rs
+expression: findings
+---
+- rule_id: SOR006
+  rule_name: panic-in-entrypoint
+  severity: warning
+  message: "`.unwrap()` will panic in function `get_admin`"
+  file: tests/fixtures/vulnerable/sor006_panics.rs
+  line: 20
+  column: 55
+  help: "use `.ok_or(Error::...)?` or a `match`/`if let` to propagate a typed `#[contracterror]` error instead of panicking"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR006.md"
+- rule_id: SOR006
+  rule_name: panic-in-entrypoint
+  severity: warning
+  message: "`.expect()` will panic in function `require_admin`"
+  file: tests/fixtures/vulnerable/sor006_panics.rs
+  line: 28
+  column: 14
+  help: "use `.ok_or(Error::...)?` or a `match`/`if let` to propagate a typed `#[contracterror]` error instead of panicking"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR006.md"
+- rule_id: SOR006
+  rule_name: panic-in-entrypoint
+  severity: warning
+  message: "`panic!` will panic in function `not_implemented`"
+  file: tests/fixtures/vulnerable/sor006_panics.rs
+  line: 33
+  column: 9
+  help: "use `.ok_or(Error::...)?` or a `match`/`if let` to propagate a typed `#[contracterror]` error instead of panicking"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR006.md"
+- rule_id: SOR006
+  rule_name: panic-in-entrypoint
+  severity: warning
+  message: "direct index with non-constant index will panic on out-of-bounds in function `get_item`"
+  file: tests/fixtures/vulnerable/sor006_panics.rs
+  line: 43
+  column: 14
+  help: "use `.ok_or(Error::...)?` or a `match`/`if let` to propagate a typed `#[contracterror]` error instead of panicking"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR006.md"
