@@ -1,0 +1,49 @@
+---
+source: crates/lint-rules/tests/sor008_tests.rs
+expression: findings
+---
+- rule_id: SOR008
+  rule_name: std-or-float-usage
+  severity: error
+  message: "contract crate is missing `#![no_std]`; Soroban contracts compile to WebAssembly and must not use the standard library"
+  file: tests/fixtures/vulnerable/sor008_std_and_float.rs
+  line: 1
+  column: 1
+  help: "add `#![no_std]` (or `#![cfg_attr(not(test), no_std)]`) at the top of lib.rs"
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR008.md"
+- rule_id: SOR008
+  rule_name: std-or-float-usage
+  severity: error
+  message: "`use std::…` imports from the standard library; use `soroban_sdk` types instead"
+  file: tests/fixtures/vulnerable/sor008_std_and_float.rs
+  line: 4
+  column: 1
+  help: ~
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR008.md"
+- rule_id: SOR008
+  rule_name: std-or-float-usage
+  severity: error
+  message: "`f64` is a floating-point type; use fixed-point integer math with explicit scaling instead"
+  file: tests/fixtures/vulnerable/sor008_std_and_float.rs
+  line: 19
+  column: 49
+  help: ~
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR008.md"
+- rule_id: SOR008
+  rule_name: std-or-float-usage
+  severity: error
+  message: "`f64` is a floating-point type; use fixed-point integer math with explicit scaling instead"
+  file: tests/fixtures/vulnerable/sor008_std_and_float.rs
+  line: 20
+  column: 14
+  help: ~
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR008.md"
+- rule_id: SOR008
+  rule_name: std-or-float-usage
+  severity: error
+  message: "`f64` is a floating-point type; use fixed-point integer math with explicit scaling instead"
+  file: tests/fixtures/vulnerable/sor008_std_and_float.rs
+  line: 20
+  column: 25
+  help: ~
+  docs_url: "https://github.com/Mossad-esc/soroban-lint/blob/main/docs/rules/SOR008.md"
