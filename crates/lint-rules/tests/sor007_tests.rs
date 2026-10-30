@@ -45,3 +45,9 @@ fn sor007_vulnerable_custom_name() {
     assert_eq!(findings.len(), 1, "expected one finding for 'bootstrap'");
     assert!(findings[0].message.contains("bootstrap"));
 }
+
+/// __constructor is exempt from SOR007 (corpus FP fix).
+#[test]
+fn sor007_safe_constructor_exempt() {
+    assert_rule_snapshot!(Sor007, "SOR007", "safe", "sor007_constructor_exempt.rs");
+}

@@ -69,6 +69,13 @@ impl Rule for Sor001 {
                 if allow.iter().any(|name| name == &entrypoint.name) {
                     continue;
                 }
+                // `__constructor` is called exactly once by the Soroban deployment
+                // framework and cannot be re-invoked by an arbitrary user.
+                // Requiring auth inside a constructor is not possible (there is no
+                // caller address yet), so we exempt it from this rule.
+                if entrypoint.name == "__constructor" {
+                    continue;
+                }
 
                 if let Some(finding) = check_entrypoint(entrypoint, ctx.path(), severity, &cg) {
                     findings.push(finding);

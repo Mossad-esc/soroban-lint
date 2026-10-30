@@ -21,3 +21,10 @@ fn sor008_safe_no_std_integer_math() {
 fn sor008_safe_cfg_attr_no_std() {
     assert_rule_snapshot!(Sor008, "SOR008", "safe", "sor008_cfg_attr_no_std.rs");
 }
+
+/// Safe: sub-module file without no_std must not trigger the missing-no_std
+/// finding (only lib.rs / main.rs should trigger it).
+#[test]
+fn sor008_safe_submodule_no_std() {
+    assert_rule_snapshot!(Sor008, "SOR008", "safe", "sor008_submodule_no_std.rs");
+}

@@ -375,7 +375,11 @@ impl Rule for Sor002 {
         }
 
         // ── Part 2: Manifest inspection ───────────────────────────────────
-        if rule_cfg.check_cargo_profile {
+        // We only emit the manifest finding when analyzing the crate-root file
+        // (src/lib.rs or src/main.rs). This prevents N identical findings from
+        // being produced for a crate with N source files — the FP source
+        // confirmed in corpus triage (soroswap-core had 28 duplicates per crate).
+        if rule_cfg.check_cargo_profile && is_crate_root(ctx.path()) {
             if let Some(manifest) = manifest_for_file(ctx.path()) {
                 if let Some(f) = check_cargo_profile(&manifest, severity) {
                     findings.push(f);
@@ -448,6 +452,17 @@ pub fn manifest_for_file(file_path: &Path) -> Option<PathBuf> {
             return None;
         }
     }
+}
+
+/// Returns `true` when `file_path` is a crate-root file (`lib.rs` or
+/// `main.rs`). Used to guard the Cargo-manifest inspection so that the
+/// profile finding is only emitted once per crate instead of once per `.rs`
+/// file.
+fn is_crate_root(file_path: &Path) -> bool {
+    file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "lib.rs" || name == "main.rs")
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

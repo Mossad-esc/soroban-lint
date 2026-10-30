@@ -604,3 +604,208 @@ fn parallel_output_is_deterministic() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Edge-case hardening tests  (exit-code contract: 0=clean, 1=findings, 2=error)
+// ---------------------------------------------------------------------------
+
+/// Helper: returns a path to an edge-case fixture.
+fn edge(name: &str) -> std::path::PathBuf {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root")
+        .join("tests")
+        .join("fixtures")
+        .join("edge_cases")
+        .join(name)
+}
+
+/// An empty file must be parsed and produce zero findings (exit 0).
+/// The tool must not panic on an empty file.
+#[test]
+fn empty_file_exits_zero_no_panic() {
+    bin()
+        .arg("check")
+        .arg(edge("empty.rs"))
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("No issues found"));
+}
+
+/// A file containing only comments must produce zero findings (exit 0).
+#[test]
+fn comments_only_exits_zero() {
+    bin()
+        .arg("check")
+        .arg(edge("comments_only.rs"))
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("No issues found"));
+}
+
+/// A file with Windows CRLF line endings must be analyzed without panicking.
+/// The tool must produce a well-formed report (exit 0 or 1 depending on findings).
+#[test]
+fn crlf_file_handled_without_panic() {
+    let result = bin()
+        .arg("check")
+        .arg(edge("crlf_endings.rs"))
+        .output()
+        .expect("command must not fail to run");
+    let code = result.status.code().unwrap_or(99);
+    assert!(
+        code == 0 || code == 1,
+        "CRLF file must exit 0 or 1, got {code}"
+    );
+}
+
+/// A file with a syntax error must exit 2 with a message; no panic.
+#[test]
+fn syntax_error_exits_two_no_panic() {
+    bin()
+        .arg("check")
+        .arg(edge("syntax_error.rs"))
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("could not parse"));
+}
+
+/// Deeply nested expressions must not overflow the stack (exit 0 or 1).
+#[test]
+fn deep_nesting_no_stack_overflow() {
+    let result = bin()
+        .arg("check")
+        .arg(edge("deep_nesting.rs"))
+        .output()
+        .expect("command must run");
+    let code = result.status.code().unwrap_or(99);
+    assert!(
+        code == 0 || code == 1,
+        "deep nesting must exit 0 or 1, got {code}"
+    );
+}
+
+/// Macro-heavy code must be analyzed without panicking (exit 0 or 1).
+#[test]
+fn macro_heavy_file_no_panic() {
+    let result = bin()
+        .arg("check")
+        .arg(edge("macro_heavy.rs"))
+        .output()
+        .expect("command must run");
+    let code = result.status.code().unwrap_or(99);
+    assert!(
+        code == 0 || code == 1,
+        "macro-heavy file must exit 0 or 1, got {code}"
+    );
+}
+
+/// Unusual attribute paths must not cause a panic (exit 0 or 1).
+#[test]
+fn unusual_attrs_no_panic() {
+    let result = bin()
+        .arg("check")
+        .arg(edge("unusual_attrs.rs"))
+        .output()
+        .expect("command must run");
+    let code = result.status.code().unwrap_or(99);
+    assert!(
+        code == 0 || code == 1,
+        "unusual attrs must exit 0 or 1, got {code}"
+    );
+}
+
+/// An unreadable file must produce exit 2 with a clear error message.
+/// This tests that the tool handles permission errors gracefully.
+#[cfg(unix)]
+#[test]
+fn unreadable_file_exits_two_with_message() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().expect("temp dir");
+    let src = dir.path().join("secret.rs");
+    std::fs::write(&src, "pub fn x() {}").unwrap();
+
+    // Remove read permission.
+    std::fs::set_permissions(&src, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    let result = bin()
+        .arg("check")
+        .arg(&src)
+        .output()
+        .expect("command must run even if it fails");
+
+    // Restore before assertions so the file is cleaned up properly.
+    let _ = std::fs::set_permissions(&src, std::fs::Permissions::from_mode(0o644));
+
+    let code = result.status.code().unwrap_or(99);
+    assert_eq!(code, 2, "unreadable file must exit 2, got {code}");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        !stderr.is_empty() || !String::from_utf8_lossy(&result.stdout).is_empty(),
+        "must produce some output for unreadable file"
+    );
+}
+
+/// Non-UTF-8 bytes: a file containing arbitrary bytes that are not valid UTF-8
+/// must be handled gracefully (exit 2 with a parse/read error, not a panic).
+#[test]
+fn non_utf8_bytes_exit_two_no_panic() {
+    let dir = tempdir().expect("temp dir");
+    let src = dir.path().join("binary.rs");
+    // Write valid Rust source bytes followed by a lone 0xFF (invalid UTF-8).
+    let mut content = b"pub fn x() {}\n".to_vec();
+    content.push(0xFF);
+    std::fs::write(&src, &content).expect("write binary file");
+
+    bin()
+        .arg("check")
+        .arg(&src)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("could not parse").or(predicate::str::contains("error")));
+}
+
+/// A huge file (many thousands of lines) must complete without a timeout or
+/// panic.  This is a performance smoke-test rather than a correctness test.
+#[test]
+fn huge_file_completes_without_panic() {
+    let dir = tempdir().expect("temp dir");
+    let src = dir.path().join("huge.rs");
+
+    // Build a file with 3000 trivial functions to stress the visitor.
+    let mut body = String::from("#![no_std]\n");
+    for i in 0..3000_usize {
+        body.push_str(&format!("pub fn f{i}(_x: u32) -> u32 {{ _x + 1 }}\n"));
+    }
+    std::fs::write(&src, &body).expect("write huge file");
+
+    let result = bin()
+        .arg("check")
+        .timeout(std::time::Duration::from_secs(60))
+        .arg(&src)
+        .output()
+        .expect("command must run");
+    let code = result.status.code().unwrap_or(99);
+    assert!(
+        code == 0 || code == 1,
+        "huge file must exit 0 or 1, got {code}"
+    );
+}
+
+/// `soroban-lint check` on a non-existent path exits 2 with an error message.
+#[test]
+fn nonexistent_path_exits_two() {
+    bin()
+        .arg("check")
+        .arg("/tmp/this_path_definitely_does_not_exist_soroban_lint_test")
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("error")
+                .or(predicate::str::contains("not found"))
+                .or(predicate::str::contains("could not")),
+        );
+}

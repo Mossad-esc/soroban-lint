@@ -46,3 +46,9 @@ fn sor001_safe_auth_for_args() {
 fn sor001_safe_auth_via_helper() {
     assert_rule_snapshot!(Sor001, "SOR001", "safe", "sor001_auth_via_helper.rs");
 }
+
+/// __constructor is exempt from require-auth (corpus FP fix).
+#[test]
+fn sor001_safe_constructor() {
+    assert_rule_snapshot!(Sor001, "SOR001", "safe", "sor001_constructor.rs");
+}

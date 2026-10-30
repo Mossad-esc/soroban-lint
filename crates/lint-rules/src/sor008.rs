@@ -67,7 +67,18 @@ impl Rule for Sor008 {
         let mut findings = Vec::new();
 
         // 1. Missing #![no_std].
-        if !ctx.model().no_std {
+        // The `no_std` inner attribute is crate-level: it only needs to appear
+        // in `lib.rs` (or `main.rs`), not in every sub-module.  Emitting this
+        // finding on a sub-module such as `contract.rs` or `test.rs` is a
+        // false positive confirmed in corpus triage (soroban-examples token
+        // contract, and three test-only files).
+        let is_root = ctx
+            .path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n == "lib.rs" || n == "main.rs");
+
+        if is_root && !ctx.model().no_std {
             findings.push(
                 Finding::new(
                     "SOR008",
@@ -265,7 +276,9 @@ mod tests {
     use syn::parse_quote;
 
     fn run(file: syn::File) -> Vec<Finding> {
-        let path = std::path::Path::new("test.rs");
+        // Use "lib.rs" so the missing-no_std check fires (it only fires on
+        // crate-root files to avoid false positives on sub-modules).
+        let path = std::path::Path::new("lib.rs");
         let model = ContractModel::build(&file);
         let config = RuleConfig::default();
         let ctx = RuleContext::new(&file, path, "", &model, &config);

@@ -68,6 +68,15 @@ impl Rule for Sor007 {
                     continue;
                 }
 
+                // `__constructor` is called exactly once by the Soroban
+                // deployment framework.  It cannot be called by an arbitrary
+                // user, so the "can be called twice" concern does not apply.
+                // Exempting it avoids the false positive confirmed in corpus
+                // triage (15 occurrences in soroban-examples).
+                if ep.name == "__constructor" {
+                    continue;
+                }
+
                 let info = scan_block(ep.block);
 
                 // Storage write check (direct + via call graph).

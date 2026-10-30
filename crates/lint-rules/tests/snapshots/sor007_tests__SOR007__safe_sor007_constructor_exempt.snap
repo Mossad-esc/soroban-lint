@@ -1,0 +1,5 @@
+---
+source: crates/lint-rules/tests/sor007_tests.rs
+expression: findings
+---
+[]
