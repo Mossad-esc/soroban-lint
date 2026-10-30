@@ -1,0 +1,5 @@
+# CODEOWNERS
+# Replace with actual GitHub usernames before the first release.
+* @your-org/soroban-lint-maintainers
+/docs/ @your-org/soroban-lint-maintainers
+/.github/ @your-org/soroban-lint-maintainers

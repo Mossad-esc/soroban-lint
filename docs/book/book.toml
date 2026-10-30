@@ -1,0 +1,13 @@
+[book]
+title = "soroban-lint"
+authors = ["soroban-lint contributors"]
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/Mossad-esc/soroban-lint"
+edit-url-template = "https://github.com/Mossad-esc/soroban-lint/edit/main/docs/book/src/{path}"
+
+[output.html.search]
+enable = true
