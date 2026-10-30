@@ -1,0 +1,167 @@
+name: Release
+
+# Triggered by version tags: v0.1.0, v0.1.0-rc.1, v1.2.3-beta.2, etc.
+# Do NOT push a release tag until CHANGELOG.md has been updated and I
+# (the repo owner) have confirmed the release candidate is ready.
+#
+# Publish order (dependency graph):
+#   lint-core → lint-rules, lint-report → lint-cli
+#
+# The release workflow builds prebuilt binaries via cargo-dist and attaches
+# them to the GitHub Release.  Crate publishing to crates.io is a separate
+# manual step (see the release runbook in CONTRIBUTING.md).
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write # needed to create and upload release assets
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Preflight checks ────────────────────────────────────────────────────────
+  preflight:
+    name: Preflight checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: Tests
+        run: cargo nextest run --workspace
+
+  # ── Build and release binaries via cargo-dist ───────────────────────────────
+  dist:
+    name: Build binaries (${{ matrix.target }})
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive_ext: .tar.gz
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            archive_ext: .tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive_ext: .tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive_ext: .tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive_ext: .zip
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: cargo build --release --locked -p lint-cli --target ${{ matrix.target }}
+
+      - name: Prepare archive (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          TARGET="${{ matrix.target }}"
+          BINARY="target/${TARGET}/release/soroban-lint"
+          ARCHIVE="soroban-lint-${VERSION}-${TARGET}.tar.gz"
+          tar -czf "${ARCHIVE}" -C "$(dirname ${BINARY})" "$(basename ${BINARY})"
+          sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Prepare archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $VERSION = "$env:GITHUB_REF_NAME"
+          $TARGET = "${{ matrix.target }}"
+          $BINARY = "target\$TARGET\release\soroban-lint.exe"
+          $ARCHIVE = "soroban-lint-$VERSION-$TARGET.zip"
+          Compress-Archive -Path $BINARY -DestinationPath $ARCHIVE
+          $hash = (Get-FileHash $ARCHIVE -Algorithm SHA256).Hash.ToLower()
+          "$hash  $ARCHIVE" | Out-File -Encoding utf8 "$ARCHIVE.sha256"
+          echo "ARCHIVE=$ARCHIVE" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: |
+            soroban-lint-*
+          retention-days: 1
+
+  # ── Create GitHub Release and attach artifacts ──────────────────────────────
+  create-release:
+    name: Create GitHub Release
+    needs: dist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Extract changelog for this version
+        id: changelog
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Extract the section for this version from CHANGELOG.md.
+          NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="See [CHANGELOG.md](https://github.com/Mossad-esc/soroban-lint/blob/main/CHANGELOG.md) for details."
+          fi
+          # Write to file to avoid shell quoting issues.
+          printf '%s' "$NOTES" > release_notes.md
+          echo "notes_file=release_notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "soroban-lint ${{ github.ref_name }}"
+          body_path: ${{ steps.changelog.outputs.notes_file }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/soroban-lint-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

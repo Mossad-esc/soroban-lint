@@ -45,3 +45,32 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = "warn"
+
+# ── Release profile ───────────────────────────────────────────────────────────
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+# Overflow checks in release builds — critical for a security tool.
+overflow-checks = true
+
+# ── cargo-dist configuration ─────────────────────────────────────────────────
+# https://opensource.axo.dev/cargo-dist/
+[workspace.metadata.dist]
+# The binary to distribute (must match [[bin]] name in lint-cli/Cargo.toml).
+cargo-dist-version = "0.32.0"
+# Tag pattern: v0.1.0 or v0.1.0-rc.1
+tag-pattern = "v[0-9]+.[0-9]+.[0-9]+*"
+# Build targets
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+]
+# Produce .tar.gz archives for unix, .zip for windows, and SHA-256 checksums.
+install-updater = false
+create-release = true
+
