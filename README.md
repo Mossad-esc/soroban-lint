@@ -909,6 +909,9 @@ Rules target the current SDK API surface. Each rule's documentation notes the SD
 
 ## License
 
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 - MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
