@@ -21,11 +21,13 @@ impl Contract {
     /// Stores a replay nonce in temporary storage — appropriate, as nonces are
     /// short-lived by design.
     pub fn use_nonce(env: Env, user: Address) {
+        user.require_auth();
         env.storage().temporary().set(&DataKey::Nonce(user), &true);
     }
 
     /// Caches replay data in temporary storage.
     pub fn cache_replay(env: Env, user: Address) {
+        user.require_auth();
         env.storage()
             .temporary()
             .set(&DataKey::ReplayCache(user), &1u32);

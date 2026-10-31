@@ -21,6 +21,7 @@ const MAX_USERS: u32 = 100;
 impl Contract {
     /// Enforces a maximum size before appending — safe.
     pub fn add_user(env: Env, new_user: Address) -> Result<(), u32> {
+        new_user.require_auth();
         let mut users: Vec<Address> = env
             .storage()
             .persistent()

@@ -24,6 +24,7 @@ pub struct Token;
 #[contractimpl]
 impl Token {
     /// Only a guard, no auth — allowed (not flagged), but discouraged.
+    // soroban-lint: allow(SOR001) reason="tests guard-only initialize for SOR007"
     pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::AlreadyInitialized);

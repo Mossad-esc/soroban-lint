@@ -20,12 +20,17 @@ pub struct Token;
 impl Token {
     /// Correct: admin is stored in instance storage which persists.
     pub fn initialize(env: Env, admin: Address) {
+        admin.require_auth();
+        if env.storage().instance().has(&DataKey::Admin) {
+            return;
+        }
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().extend_ttl(1000u32, 10000u32);
     }
 
     /// Correct: per-user balances in persistent storage.
     pub fn set_balance(env: Env, user: Address, amount: i128) {
+        user.require_auth();
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user), &amount);

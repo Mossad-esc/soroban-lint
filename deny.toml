@@ -3,8 +3,7 @@ all-features = true
 
 [advisories]
 yanked = "deny"
-unmaintained = "warn"
-notice = "warn"
+unmaintained = "all"
 
 [licenses]
 confidence-threshold = 0.8
