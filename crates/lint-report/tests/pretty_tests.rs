@@ -79,7 +79,7 @@ fn pretty_one_finding() {
         .render(&report(vec![finding], 1))
         .unwrap();
     // Strip the absolute prefix so the snapshot is portable.
-    let root_str = workspace_root().to_string_lossy().into_owned();
+    let root_str = workspace_root().to_string_lossy().replace('\\', "/");
     let portable = output.replace(&root_str, "<workspace>");
     insta::assert_snapshot!(portable);
 }
@@ -99,7 +99,7 @@ fn pretty_multiple_findings() {
     let output = PrettyReporter::new(false)
         .render(&report(findings, 2))
         .unwrap();
-    let root_str = root.to_string_lossy().into_owned();
+    let root_str = root.to_string_lossy().replace('\\', "/");
     let portable = output.replace(&root_str, "<workspace>");
     insta::assert_snapshot!(portable);
 }
